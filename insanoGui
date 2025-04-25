@@ -2,7 +2,6 @@ local player = game.Players.LocalPlayer
 local mouse = player:GetMouse()
 local rs = game:GetService("RunService")
 local uis = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 
 -- Crear ScreenGui
 local screenGui = Instance.new("ScreenGui")
@@ -10,10 +9,10 @@ screenGui.Name = "OpcionesGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Panel principal ancho
+-- Panel principal
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 500, 0, 420)
-mainFrame.Position = UDim2.new(0.5, -250, 0.5, -210)
+mainFrame.Size = UDim2.new(0, 500, 0, 460)
+mainFrame.Position = UDim2.new(0.5, -250, 0.5, -230)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -21,7 +20,7 @@ mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 16)
 
--- Sombra interna con UIStroke
+-- Sombra interna
 local stroke = Instance.new("UIStroke", mainFrame)
 stroke.Thickness = 4
 stroke.Transparency = 0.7
@@ -31,7 +30,6 @@ stroke.Color = Color3.fromRGB(0, 0, 0)
 local gradient = Instance.new("UIGradient", mainFrame)
 gradient.Color = ColorSequence.new(Color3.fromRGB(30,30,36), Color3.fromRGB(20,20,26))
 gradient.Rotation = 90
-
 gradient.Transparency = NumberSequence.new(0)
 
 -- Barra de título
@@ -77,7 +75,7 @@ end)
 
 -- Contenedor con scroll
 local holder = Instance.new("ScrollingFrame", mainFrame)
-holder.Size = UDim2.new(1, -40, 1, -80)
+holder.Size = UDim2.new(1, -40, 1, -100)
 holder.Position = UDim2.new(0, 20, 0, 60)
 holder.BackgroundTransparency = 1
 holder.ScrollBarThickness = 6
@@ -89,7 +87,7 @@ layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 layout.VerticalAlignment = Enum.VerticalAlignment.Top
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 
--- Fabrica de botones
+-- Botones e inputs
 local function makeButton(text, cb)
     local btn = Instance.new("TextButton", holder)
     btn.Size = UDim2.new(0, 460, 0, 40)
@@ -106,7 +104,6 @@ local function makeButton(text, cb)
     return btn
 end
 
--- Fabrica de inputs
 local function makeInput(placeholder, default, cb)
     local box = Instance.new("TextBox", holder)
     box.Size = UDim2.new(0, 460, 0, 36)
@@ -118,23 +115,19 @@ local function makeInput(placeholder, default, cb)
     return box
 end
 
--- Barra de búsqueda funcional (filtra botones)
+-- Búsqueda
 local searchBox = makeInput("Buscar...", "", function() end)
 searchBox.Changed:Connect(function()
     local filter = searchBox.Text:lower()
     for _, child in pairs(holder:GetChildren()) do
-        if child:IsA("TextButton") then
-            -- mostrar si el texto del botón coincide con el filtro
-            if child.Text:lower():find(filter) then
-                child.Visible = true
-            else
-                child.Visible = false
-            end
+        if child:IsA("TextButton") or child:IsA("TextBox") then
+            local textToCheck = child.Text ~= "" and child.Text or child.PlaceholderText
+            child.Visible = textToCheck:lower():find(filter) and true or false
         end
     end
 end)
 
--- Lógica Volar
+-- Volar
 local flying, vel, gyro, flyConn = false
 makeButton("Volar (WASD)", function()
     flying = not flying
@@ -157,123 +150,133 @@ makeButton("Volar (WASD)", function()
     end
 end)
 
--- Lógica Fling
-local flingEnabled, flingConn = false
+-- Fling
+local flingEnabled = false
+local flingConn
 makeButton("Fling (toggle)", function()
     flingEnabled = not flingEnabled
-    local char = player.Character; if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
-    if flingEnabled then
-        local fling = Instance.new("BodyAngularVelocity", hrp)
-        fling.MaxTorque = Vector3.new(1e9,1e9,1e9); fling.AngularVelocity = Vector3.new(9999,9999,9999)
-        flingConn = char.AncestryChanged:Connect(function()
-            if not char:IsDescendantOf(game) then fling:Destroy(); if flingConn then flingConn:Disconnect() end end
-        end)
-    else
-        local old = hrp:FindFirstChildOfClass("BodyAngularVelocity"); if old then old:Destroy() end; if flingConn then flingConn:Disconnect() end
+    if not flingEnabled then
+        if flingConn then flingConn:Disconnect() end; flingConn = nil
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then local bav = hrp:FindFirstChild("FlingAV") if bav then bav:Destroy() end end
+        return
+    end
+    flingConn = rs.Heartbeat:Connect(function()
+        local char = player.Character; if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+        if not hrp:FindFirstChild("FlingAV") then
+            local bav = Instance.new("BodyAngularVelocity")
+            bav.Name = "FlingAV"
+            bav.MaxTorque = Vector3.new(1e9,1e9,1e9)
+            bav.AngularVelocity = Vector3.new(0,8000,0)
+            bav.Parent = hrp
+        end
+    end)
+end)
+
+-- Freecam
+local freecamEnabled = false
+local freecamConn, freecamPart, freecamVel, freecamGyro
+makeButton("Freecam (toggle)", function()
+    freecamEnabled = not freecamEnabled
+    local cam = workspace.CurrentCamera
+    if not freecamEnabled then
+        if freecamConn then freecamConn:Disconnect() end
+        if freecamPart then freecamPart:Destroy() end
+        cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or cam.CameraSubject
+        cam.CameraType = Enum.CameraType.Custom
+        return
+    end
+    -- crear parte para cámara libre
+    freecamPart = Instance.new("Part") freecamPart.Name = "FreecamPart"
+    freecamPart.Size = Vector3.new(1,1,1) freecamPart.Transparency = 1 freecamPart.CanCollide = false
+    freecamPart.CFrame = cam.CFrame freecamPart.Parent = workspace
+    cam.CameraSubject = freecamPart
+    cam.CameraType = Enum.CameraType.Scriptable
+    -- añadir control de movimiento similar a volar
+    freecamConn = rs.RenderStepped:Connect(function()
+        local dir = Vector3.zero
+        if uis:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
+        if uis:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
+        if uis:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
+        if uis:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
+        freecamPart.CFrame = freecamPart.CFrame + dir.Unit * 60 * rs.RenderStepped:Wait()
+    end)
+end)
+
+-- Teleport a jugador
+local tpBox = makeInput("Jugador a teletransportar", "", function() end)
+makeButton("Teleport to Player", function()
+    local name = tpBox.Text
+    local target = game.Players:FindFirstChild(name)
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.CFrame = target.Character.HumanoidRootPart.CFrame * CFrame.new(0,3,0) end
     end
 end)
 
--- Lógica Tool TP
+-- Tool TP
 makeButton("Tool TP (Click)", function()
-    local tool = Instance.new("Tool"); tool.RequiresHandle=false; tool.Name="ClickTP"
+    local tool = Instance.new("Tool") tool.RequiresHandle = false tool.Name = "ClickTP"
     tool.Activated:Connect(function()
-        local char=player.Character; if char then local hrp=char:FindFirstChild("HumanoidRootPart"); if hrp then hrp.CFrame=CFrame.new(mouse.Hit.Position+Vector3.new(0,3,0)) end end
+        local char = player.Character
+        if char then local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0,3,0)) end
+        end
     end)
-    tool.Parent=player.Backpack
+    tool.Parent = player.Backpack
 end)
 
 -- WalkSpeed
 makeInput("WalkSpeed (16)", "16", function(v)
-    if v and player.Character then player.Character:FindFirstChildOfClass("Humanoid").WalkSpeed=v end
+    if v and player.Character then player.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = v end
 end)
 
 -- JumpPower
 makeInput("JumpPower (50)", "50", function(v)
-    if v and player.Character then player.Character:FindFirstChildOfClass("Humanoid").JumpPower=v end
+    if v and player.Character then player.Character:FindFirstChildOfClass("Humanoid").JumpPower = v end
 end)
 
 -- Noclip
 local noclip, noclipConn = false
 makeButton("Toggle Noclip", function()
     noclip = not noclip
-    if noclip then noclipConn = rs.Stepped:Connect(function() if player.Character then for _,p in pairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=false end end end end)
-    else if noclipConn then noclipConn:Disconnect() end; if player.Character then for _,p in pairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=true end end end end
+    if noclip then noclipConn = rs.Stepped:Connect(function()
+            if player.Character then for _, p in ipairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end end
+        end)
+    else
+        if noclipConn then noclipConn:Disconnect() end
+        if player.Character then for _, p in ipairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = true end end end
+    end
 end)
 
--- ESP persistente y funcional
+-- ESP
 local espEnabled, espConnections = false, {}
-
 local function clearESP()
-    -- destroy previous adornments and billboards
-    for _, conn in pairs(espConnections) do
-        conn:Disconnect()
-    end
-    espConnections = {}
-    -- remove adornments
-    for _, plr in pairs(game.Players:GetPlayers()) do
-        if plr.Character then
-            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                for _, c in pairs(hrp:GetChildren()) do
-                    if c:IsA("BoxHandleAdornment") then c:Destroy() end
-                end
-            end
-            -- remove name billboard
-            local gui = screenGui:FindFirstChild(plr.Name.."_ESPName")
-            if gui then gui:Destroy() end
+    for _, conn in ipairs(espConnections) do conn:Disconnect() end espConnections = {}
+    for _, plr in ipairs(game.Players:GetPlayers()) do
+        if plr.Character then local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then for _, c in ipairs(hrp:GetChildren()) do if c:IsA("BoxHandleAdornment") then c:Destroy() end end end
+            local gui = screenGui:FindFirstChild(plr.Name.."_ESPName") if gui then gui:Destroy() end
         end
     end
 end
-
 local function applyESP(plr)
-    -- box adornment
     local function adornCharacter(char)
         local hrp = char:WaitForChild("HumanoidRootPart")
-        -- create box
-        local box = Instance.new("BoxHandleAdornment")
-        box.Name = "ESPBox"
-        box.Adornee = hrp
-        box.AlwaysOnTop = true
-        box.ZIndex = 10
-        box.Size = hrp.Size + Vector3.new(0, hrp.Size.Y * 0.5, 0)
-        box.Color3 = Color3.fromRGB(255, 0, 0)
-        box.Transparency = 0.4
-        box.Parent = hrp
-        -- create name billboard
-        local gui = Instance.new("BillboardGui")
-        gui.Name = plr.Name.."_ESPName"
-        gui.Adornee = char:WaitForChild("Head")
-        gui.Size = UDim2.new(0, 100, 0, 30)
-        gui.StudsOffset = Vector3.new(0, 3, 0)
-        gui.AlwaysOnTop = true
-        gui.Parent = screenGui
-        local txt = Instance.new("TextLabel", gui)
-        txt.Size = UDim2.new(1,0,1,0)
-        txt.BackgroundTransparency = 1
-        txt.Text = plr.Name
-        txt.Font = Enum.Font.GothamBold
-        txt.TextSize = 14
-        txt.TextColor3 = Color3.new(1,1,1)
+        local box = Instance.new("BoxHandleAdornment") box.Name = "ESPBox" box.Adornee = hrp box.AlwaysOnTop = true box.ZIndex = 10
+        box.Size = hrp.Size + Vector3.new(0, hrp.Size.Y * 0.5, 0) box.Color3 = Color3.fromRGB(255,0,0) box.Transparency = 0.4 box.Parent = hrp
+        local gui = Instance.new("BillboardGui") gui.Name = plr.Name.."_ESPName" gui.Adornee = char:WaitForChild("Head") gui.Size = UDim2.new(0,100,0,30)
+        gui.StudsOffset = Vector3.new(0,3,0) gui.AlwaysOnTop = true gui.Parent = screenGui
+        local txt = Instance.new("TextLabel", gui) txt.Size = UDim2.new(1,0,1,0) txt.BackgroundTransparency = 1
+        txt.Text = plr.Name txt.Font = Enum.Font.GothamBold txt.TextSize = 14 txt.TextColor3 = Color3.new(1,1,1)
     end
-    -- initial if character exists
     if plr.Character then adornCharacter(plr.Character) end
-    -- reconnect on respawn
-    local conn = plr.CharacterAdded:Connect(adornCharacter)
-    table.insert(espConnections, conn)
+    table.insert(espConnections, plr.CharacterAdded:Connect(function(c) adornCharacter(c) end))
 end
-
 makeButton("Toggle ESP", function()
     espEnabled = not espEnabled
-    if espEnabled then
-        for _, plr in pairs(game.Players:GetPlayers()) do
-            if plr ~= player then applyESP(plr) end
-        end
-        -- listen for new players
-        table.insert(espConnections, game.Players.PlayerAdded:Connect(function(plr)
-            applyESP(plr)
-        end))
-    else
-        clearESP()
-    end
+    if espEnabled then for _, plr in ipairs(game.Players:GetPlayers()) do if plr ~= player then applyESP(plr) end end
+        table.insert(espConnections, game.Players.PlayerAdded:Connect(function(plr) applyESP(plr) end))
+    else clearESP() end
 end)
