@@ -118,13 +118,18 @@ local function makeInput(placeholder, default, cb)
     return box
 end
 
--- Barra de búsqueda funcional
-local searchBox = makeInput("Buscar jugador...", "", function() end)
+-- Barra de búsqueda funcional (filtra botones)
+local searchBox = makeInput("Buscar...", "", function() end)
 searchBox.Changed:Connect(function()
     local filter = searchBox.Text:lower()
-    for _, adorn in pairs(holder:GetChildren()) do
-        if adorn:IsA("BillboardGui") or adorn:IsA("TextBox") or adorn:IsA("TextButton") then
-            -- no filtrar these
+    for _, child in pairs(holder:GetChildren()) do
+        if child:IsA("TextButton") then
+            -- mostrar si el texto del botón coincide con el filtro
+            if child.Text:lower():find(filter) then
+                child.Visible = true
+            else
+                child.Visible = false
+            end
         end
     end
 end)
