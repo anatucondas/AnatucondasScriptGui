@@ -41,15 +41,14 @@ titleBar.BackgroundTransparency = 1
 
 local title = Instance.new("TextLabel", titleBar)
 title.Size = UDim2.new(1, -80, 1, 0)
-title.Position = UDim2.new(0, 20, 0, 0)
+title.Position = UDim2.new(0.5, 0, 0, 0)
+title.AnchorPoint = Vector2.new(0.5, 0)
 title.BackgroundTransparency = 1
 title.Text = "Anatucondas script GUI"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 20
 title.TextXAlignment = Enum.TextXAlignment.Center
-title.AnchorPoint = Vector2.new(0.5, 0)
-title.Position = UDim2.new(0.5, 0, 0, 0)
 
 -- Iconos de control
 local function makeIcon(text, posX, callback)
@@ -119,6 +118,17 @@ local function makeInput(placeholder, default, cb)
     return box
 end
 
+-- Barra de búsqueda funcional
+local searchBox = makeInput("Buscar jugador...", "", function() end)
+searchBox.Changed:Connect(function()
+    local filter = searchBox.Text:lower()
+    for _, adorn in pairs(holder:GetChildren()) do
+        if adorn:IsA("BillboardGui") or adorn:IsA("TextBox") or adorn:IsA("TextButton") then
+            -- no filtrar these
+        end
+    end
+end)
+
 -- Lógica Volar
 local flying, vel, gyro, flyConn = false
 makeButton("Volar (WASD)", function()
@@ -186,32 +196,48 @@ makeButton("Toggle Noclip", function()
     else if noclipConn then noclipConn:Disconnect() end; if player.Character then for _,p in pairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=true end end end end
 end)
 
--- ESP
+-- ESP persistente
+game.Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function()
+        wait(0.5)
+        -- reapply ESP if enabled
+        if espEnabled then esp(plr) end
+    end)
+end)
+
 local espEnabled, espMarkers = false, {}
+
+-- función ESP que persiste
+function esp(plr)
+    coroutine.wrap(function()
+        while espEnabled and plr.Parent do
+            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                if not plr.Character:FindFirstChild("ESPBox") then
+                    local box = Instance.new("BoxHandleAdornment", plr.Character.HumanoidRootPart)
+                    box.Adornee = plr.Character.HumanoidRootPart
+                    box.AlwaysOnTop = true
+                    box.Size = plr.Character.HumanoidRootPart.Size + Vector3.new(0, plr.Character.HumanoidRootPart.Size.Y/2, 0)
+                    box.Color3 = Color3.new(1,0,0)
+                    box.Transparency = 0.5
+                    box.Name = "ESPBox"
+                end
+            end
+            wait(1)
+        end
+    end)()
+end
+
 makeButton("Toggle ESP", function()
     espEnabled = not espEnabled
-    for _,m in pairs(espMarkers) do m:Destroy() end; espMarkers={}
     if espEnabled then
         for _,plr in pairs(game.Players:GetPlayers()) do
-            if plr~=player and plr.Character and plr.Character:FindFirstChild("Head") then
-                -- Nombre
-                local gui=Instance.new("BillboardGui", player.PlayerGui)
-                gui.Adornee=plr.Character.Head; gui.Size=UDim2.new(0,100,0,30); gui.AlwaysOnTop=true
-                gui.StudsOffset = Vector3.new(0, 2.5, 0) -- elevar nombre sobre la caja
-                local txt=Instance.new("TextLabel",gui)
-                txt.Size=UDim2.new(1,0,1,0); txt.BackgroundTransparency=1; txt.Text=plr.Name
-                txt.Font=Enum.Font.Gotham; txt.TextSize=14; txt.TextColor3=Color3.new(1,1,1)
-                table.insert(espMarkers,gui)
-                -- Caja ajustada al HumanoidRootPart
-                local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-                local box = Instance.new("BoxHandleAdornment", hrp)
-                box.Adornee = hrp
-                box.AlwaysOnTop = true
-                box.ZIndex = 1
-                box.Size = hrp.Size + Vector3.new(0, hrp.Size.Y/2, 0) -- un poco de altura extra
-                box.Color3 = Color3.new(1,0,0)
-                box.Transparency = 0.5
-                table.insert(espMarkers, box)
+            if plr ~= player then esp(plr) end
+        end
+    else
+        -- limpiar adornos
+        for _,plr in pairs(game.Players:GetPlayers()) do
+            if plr.Character then
+                if plr.Character:FindFirstChild("ESPBox") then plr.Character.ESPBox:Destroy() end
             end
         end
     end
