@@ -196,52 +196,79 @@ makeButton("Toggle Noclip", function()
     else if noclipConn then noclipConn:Disconnect() end; if player.Character then for _,p in pairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=true end end end end
 end)
 
--- ESP persistente
-game.Players.PlayerAdded:Connect(function(plr)
-    plr.CharacterAdded:Connect(function()
-        wait(0.5)
-        -- reapply ESP if enabled
-        if espEnabled then esp(plr) end
-    end)
-end)
+-- ESP persistente y funcional
+local espEnabled, espConnections = false, {}
 
-local espEnabled, espMarkers = false, {}
-
--- función ESP que persiste
-function esp(plr)
-    coroutine.wrap(function()
-        while espEnabled and plr.Parent do
-            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                if not plr.Character:FindFirstChild("ESPBox") then
-                    local box = Instance.new("BoxHandleAdornment", plr.Character.HumanoidRootPart)
-                    box.Adornee = plr.Character.HumanoidRootPart
-                    box.AlwaysOnTop = true
-                    box.Size = plr.Character.HumanoidRootPart.Size + Vector3.new(0, plr.Character.HumanoidRootPart.Size.Y/2, 0)
-                    box.Color3 = Color3.new(1,0,0)
-                    box.Transparency = 0.5
-                    box.Name = "ESPBox"
+local function clearESP()
+    -- destroy previous adornments and billboards
+    for _, conn in pairs(espConnections) do
+        conn:Disconnect()
+    end
+    espConnections = {}
+    -- remove adornments
+    for _, plr in pairs(game.Players:GetPlayers()) do
+        if plr.Character then
+            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                for _, c in pairs(hrp:GetChildren()) do
+                    if c:IsA("BoxHandleAdornment") then c:Destroy() end
                 end
             end
-            wait(1)
+            -- remove name billboard
+            local gui = screenGui:FindFirstChild(plr.Name.."_ESPName")
+            if gui then gui:Destroy() end
         end
-    end)()
+    end
+end
+
+local function applyESP(plr)
+    -- box adornment
+    local function adornCharacter(char)
+        local hrp = char:WaitForChild("HumanoidRootPart")
+        -- create box
+        local box = Instance.new("BoxHandleAdornment")
+        box.Name = "ESPBox"
+        box.Adornee = hrp
+        box.AlwaysOnTop = true
+        box.ZIndex = 10
+        box.Size = hrp.Size + Vector3.new(0, hrp.Size.Y * 0.5, 0)
+        box.Color3 = Color3.fromRGB(255, 0, 0)
+        box.Transparency = 0.4
+        box.Parent = hrp
+        -- create name billboard
+        local gui = Instance.new("BillboardGui")
+        gui.Name = plr.Name.."_ESPName"
+        gui.Adornee = char:WaitForChild("Head")
+        gui.Size = UDim2.new(0, 100, 0, 30)
+        gui.StudsOffset = Vector3.new(0, 3, 0)
+        gui.AlwaysOnTop = true
+        gui.Parent = screenGui
+        local txt = Instance.new("TextLabel", gui)
+        txt.Size = UDim2.new(1,0,1,0)
+        txt.BackgroundTransparency = 1
+        txt.Text = plr.Name
+        txt.Font = Enum.Font.GothamBold
+        txt.TextSize = 14
+        txt.TextColor3 = Color3.new(1,1,1)
+    end
+    -- initial if character exists
+    if plr.Character then adornCharacter(plr.Character) end
+    -- reconnect on respawn
+    local conn = plr.CharacterAdded:Connect(adornCharacter)
+    table.insert(espConnections, conn)
 end
 
 makeButton("Toggle ESP", function()
     espEnabled = not espEnabled
     if espEnabled then
-        for _,plr in pairs(game.Players:GetPlayers()) do
-            if plr ~= player then esp(plr) end
+        for _, plr in pairs(game.Players:GetPlayers()) do
+            if plr ~= player then applyESP(plr) end
         end
+        -- listen for new players
+        table.insert(espConnections, game.Players.PlayerAdded:Connect(function(plr)
+            applyESP(plr)
+        end))
     else
-        -- limpiar adornos
-        for _,plr in pairs(game.Players:GetPlayers()) do
-            if plr.Character then
-                if plr.Character:FindFirstChild("ESPBox") then plr.Character.ESPBox:Destroy() end
-            end
-        end
+        clearESP()
     end
 end)
-
--- Mostrar GUI por defecto
-mainFrame.Visible = true
