@@ -1,0 +1,221 @@
+local player = game.Players.LocalPlayer
+local mouse = player:GetMouse()
+local rs = game:GetService("RunService")
+local uis = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+-- Crear ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "OpcionesGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Panel principal ancho
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 500, 0, 420)
+mainFrame.Position = UDim2.new(0.5, -250, 0.5, -210)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 16)
+
+-- Sombra interna con UIStroke
+local stroke = Instance.new("UIStroke", mainFrame)
+stroke.Thickness = 4
+stroke.Transparency = 0.7
+stroke.Color = Color3.fromRGB(0, 0, 0)
+
+-- Gradiente de fondo
+local gradient = Instance.new("UIGradient", mainFrame)
+gradient.Color = ColorSequence.new(Color3.fromRGB(30,30,36), Color3.fromRGB(20,20,26))
+gradient.Rotation = 90
+
+gradient.Transparency = NumberSequence.new(0)
+
+-- Barra de título
+local titleBar = Instance.new("Frame", mainFrame)
+titleBar.Size = UDim2.new(1, 0, 0, 40)
+titleBar.BackgroundTransparency = 1
+
+local title = Instance.new("TextLabel", titleBar)
+title.Size = UDim2.new(1, -80, 1, 0)
+title.Position = UDim2.new(0, 20, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "Anatucondas script GUI"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextXAlignment = Enum.TextXAlignment.Center
+title.AnchorPoint = Vector2.new(0.5, 0)
+title.Position = UDim2.new(0.5, 0, 0, 0)
+
+-- Iconos de control
+local function makeIcon(text, posX, callback)
+    local btn = Instance.new("TextButton", titleBar)
+    btn.Size = UDim2.new(0, 28, 0, 28)
+    btn.Position = UDim2.new(0, posX, 0, 6)
+    btn.Text = text; btn.Font = Enum.Font.GothamBold; btn.TextSize = 18; btn.TextColor3 = Color3.fromRGB(200,200,200)
+    btn.BackgroundColor3 = Color3.fromRGB(40,40,45)
+    btn.AutoButtonColor = false
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
+    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(60,60,65) end)
+    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(40,40,45) end)
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+makeIcon("-", 10, function() mainFrame.Visible = false end)
+makeIcon("x", 462, function() screenGui:Destroy() end)
+
+-- Mostrar botón cuando esté oculto
+screenGui.ChildRemoved:Connect(function(child)
+    if child == mainFrame then
+        local showBtn = makeIcon("↺", 236, function() mainFrame.Visible = true; showBtn:Destroy() end)
+        showBtn.Position = UDim2.new(0.5, -14, 0.5, -14)
+    end
+end)
+
+-- Contenedor con scroll
+local holder = Instance.new("ScrollingFrame", mainFrame)
+holder.Size = UDim2.new(1, -40, 1, -80)
+holder.Position = UDim2.new(0, 20, 0, 60)
+holder.BackgroundTransparency = 1
+holder.ScrollBarThickness = 6
+Instance.new("UICorner", holder).CornerRadius = UDim.new(0,8)
+
+local layout = Instance.new("UIListLayout", holder)
+layout.Padding = UDim.new(0, 12)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.VerticalAlignment = Enum.VerticalAlignment.Top
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- Fabrica de botones
+local function makeButton(text, cb)
+    local btn = Instance.new("TextButton", holder)
+    btn.Size = UDim2.new(0, 460, 0, 40)
+    btn.BackgroundColor3 = Color3.fromRGB(45,45,55)
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.Text = text; btn.Font = Enum.Font.GothamBold; btn.TextSize = 16
+    btn.AutoButtonColor = false
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
+    local stroke2 = Instance.new("UIStroke", btn)
+    stroke2.Thickness = 1; stroke2.Color = Color3.fromRGB(70,70,80)
+    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(65,65,75) end)
+    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(45,45,55) end)
+    btn.MouseButton1Click:Connect(cb)
+    return btn
+end
+
+-- Fabrica de inputs
+local function makeInput(placeholder, default, cb)
+    local box = Instance.new("TextBox", holder)
+    box.Size = UDim2.new(0, 460, 0, 36)
+    box.PlaceholderText = placeholder; box.Text = default; box.ClearTextOnFocus = false
+    box.Font = Enum.Font.Gotham; box.TextSize = 16
+    box.BackgroundColor3 = Color3.fromRGB(45,45,55); box.TextColor3 = Color3.fromRGB(255,255,255)
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0,8)
+    box.FocusLost:Connect(function() cb(tonumber(box.Text)) end)
+    return box
+end
+
+-- Lógica Volar
+local flying, vel, gyro, flyConn = false
+makeButton("Volar (WASD)", function()
+    flying = not flying
+    local char = player.Character; if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    if flying then
+        vel = Instance.new("BodyVelocity", hrp); vel.MaxForce = Vector3.new(1e5,1e5,1e5); vel.Velocity = Vector3.zero
+        gyro = Instance.new("BodyGyro", hrp); gyro.MaxTorque = Vector3.new(1e7,1e7,1e7); gyro.P = 1e5
+        flyConn = rs.RenderStepped:Connect(function()
+            local cam = workspace.CurrentCamera; local dir = Vector3.zero
+            if uis:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
+            if uis:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
+            if uis:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
+            if uis:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
+            vel.Velocity = (dir.Magnitude>0 and dir.Unit*60) or Vector3.zero
+            gyro.CFrame = CFrame.new(hrp.Position, hrp.Position + cam.CFrame.LookVector)
+        end)
+    else
+        if flyConn then flyConn:Disconnect() end; if vel then vel:Destroy() end; if gyro then gyro:Destroy() end
+    end
+end)
+
+-- Lógica Fling
+local flingEnabled, flingConn = false
+makeButton("Fling (toggle)", function()
+    flingEnabled = not flingEnabled
+    local char = player.Character; if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    if flingEnabled then
+        local fling = Instance.new("BodyAngularVelocity", hrp)
+        fling.MaxTorque = Vector3.new(1e9,1e9,1e9); fling.AngularVelocity = Vector3.new(9999,9999,9999)
+        flingConn = char.AncestryChanged:Connect(function()
+            if not char:IsDescendantOf(game) then fling:Destroy(); if flingConn then flingConn:Disconnect() end end
+        end)
+    else
+        local old = hrp:FindFirstChildOfClass("BodyAngularVelocity"); if old then old:Destroy() end; if flingConn then flingConn:Disconnect() end
+    end
+end)
+
+-- Lógica Tool TP
+makeButton("Tool TP (Click)", function()
+    local tool = Instance.new("Tool"); tool.RequiresHandle=false; tool.Name="ClickTP"
+    tool.Activated:Connect(function()
+        local char=player.Character; if char then local hrp=char:FindFirstChild("HumanoidRootPart"); if hrp then hrp.CFrame=CFrame.new(mouse.Hit.Position+Vector3.new(0,3,0)) end end
+    end)
+    tool.Parent=player.Backpack
+end)
+
+-- WalkSpeed
+makeInput("WalkSpeed (16)", "16", function(v)
+    if v and player.Character then player.Character:FindFirstChildOfClass("Humanoid").WalkSpeed=v end
+end)
+
+-- JumpPower
+makeInput("JumpPower (50)", "50", function(v)
+    if v and player.Character then player.Character:FindFirstChildOfClass("Humanoid").JumpPower=v end
+end)
+
+-- Noclip
+local noclip, noclipConn = false
+makeButton("Toggle Noclip", function()
+    noclip = not noclip
+    if noclip then noclipConn = rs.Stepped:Connect(function() if player.Character then for _,p in pairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=false end end end end)
+    else if noclipConn then noclipConn:Disconnect() end; if player.Character then for _,p in pairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=true end end end end
+end)
+
+-- ESP
+local espEnabled, espMarkers = false, {}
+makeButton("Toggle ESP", function()
+    espEnabled = not espEnabled
+    for _,m in pairs(espMarkers) do m:Destroy() end; espMarkers={}
+    if espEnabled then
+        for _,plr in pairs(game.Players:GetPlayers()) do
+            if plr~=player and plr.Character and plr.Character:FindFirstChild("Head") then
+                -- Nombre
+                local gui=Instance.new("BillboardGui", player.PlayerGui)
+                gui.Adornee=plr.Character.Head; gui.Size=UDim2.new(0,100,0,30); gui.AlwaysOnTop=true
+                gui.StudsOffset = Vector3.new(0, 2.5, 0) -- elevar nombre sobre la caja
+                local txt=Instance.new("TextLabel",gui)
+                txt.Size=UDim2.new(1,0,1,0); txt.BackgroundTransparency=1; txt.Text=plr.Name
+                txt.Font=Enum.Font.Gotham; txt.TextSize=14; txt.TextColor3=Color3.new(1,1,1)
+                table.insert(espMarkers,gui)
+                -- Caja ajustada al HumanoidRootPart
+                local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                local box = Instance.new("BoxHandleAdornment", hrp)
+                box.Adornee = hrp
+                box.AlwaysOnTop = true
+                box.ZIndex = 1
+                box.Size = hrp.Size + Vector3.new(0, hrp.Size.Y/2, 0) -- un poco de altura extra
+                box.Color3 = Color3.new(1,0,0)
+                box.Transparency = 0.5
+                table.insert(espMarkers, box)
+            end
+        end
+    end
+end)
+
+-- Mostrar GUI por defecto
+mainFrame.Visible = true
