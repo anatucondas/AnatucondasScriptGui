@@ -1,282 +1,278 @@
 local player = game.Players.LocalPlayer
-local mouse = player:GetMouse()
-local rs = game:GetService("RunService")
-local uis = game:GetService("UserInputService")
+local camera = workspace.CurrentCamera
+local espEnabled = false
+local fovEnabled = false
+local aimbotEnabled = false
+local fovSize = 200
+local espObjects = {}
+local targets = {}
+local dragging = false
+local dragStart, startPos
+local userInputService = game:GetService("UserInputService")
+local runService = game:GetService("RunService")
 
--- Crear ScreenGui
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "OpcionesGui"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
+local gui = Instance.new("ScreenGui")
+gui.Name = "AdvancedESPGui"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
 
--- Panel principal
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 500, 0, 460)
-mainFrame.Position = UDim2.new(0.5, -250, 0.5, -230)
-mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-mainFrame.BorderSizePixel = 0
-mainFrame.Active = true
-mainFrame.Draggable = true
-mainFrame.Parent = screenGui
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 16)
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 180, 0, 100)
+frame.Position = UDim2.new(0.02, 0, 0.85, 0)
+frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+frame.BackgroundTransparency = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
 
--- Sombra interna
-local stroke = Instance.new("UIStroke", mainFrame)
-stroke.Thickness = 4
-stroke.Transparency = 0.7
-stroke.Color = Color3.fromRGB(0, 0, 0)
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 20, 20)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(60, 60, 60))
+}
+gradient.Parent = frame
 
--- Gradiente de fondo
-local gradient = Instance.new("UIGradient", mainFrame)
-gradient.Color = ColorSequence.new(Color3.fromRGB(30,30,36), Color3.fromRGB(20,20,26))
-gradient.Rotation = 90
-gradient.Transparency = NumberSequence.new(0)
-
--- Barra de título
-local titleBar = Instance.new("Frame", mainFrame)
-titleBar.Size = UDim2.new(1, 0, 0, 40)
-titleBar.BackgroundTransparency = 1
-
-local title = Instance.new("TextLabel", titleBar)
-title.Size = UDim2.new(1, -80, 1, 0)
-title.Position = UDim2.new(0.5, 0, 0, 0)
-title.AnchorPoint = Vector2.new(0.5, 0)
-title.BackgroundTransparency = 1
-title.Text = "Anatucondas script GUI"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 20
-title.TextXAlignment = Enum.TextXAlignment.Center
-
--- Iconos de control
-local function makeIcon(text, posX, callback)
-    local btn = Instance.new("TextButton", titleBar)
-    btn.Size = UDim2.new(0, 28, 0, 28)
-    btn.Position = UDim2.new(0, posX, 0, 6)
-    btn.Text = text; btn.Font = Enum.Font.GothamBold; btn.TextSize = 18; btn.TextColor3 = Color3.fromRGB(200,200,200)
-    btn.BackgroundColor3 = Color3.fromRGB(40,40,45)
-    btn.AutoButtonColor = false
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
-    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(60,60,65) end)
-    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(40,40,45) end)
-    btn.MouseButton1Click:Connect(callback)
-    return btn
-end
-makeIcon("-", 10, function() mainFrame.Visible = false end)
-makeIcon("x", 462, function() screenGui:Destroy() end)
-
--- Mostrar botón cuando esté oculto
-screenGui.ChildRemoved:Connect(function(child)
-    if child == mainFrame then
-        local showBtn = makeIcon("↺", 236, function() mainFrame.Visible = true; showBtn:Destroy() end)
-        showBtn.Position = UDim2.new(0.5, -14, 0.5, -14)
-    end
-end)
-
--- Contenedor con scroll
-local holder = Instance.new("ScrollingFrame", mainFrame)
-holder.Size = UDim2.new(1, -40, 1, -100)
-holder.Position = UDim2.new(0, 20, 0, 60)
-holder.BackgroundTransparency = 1
-holder.ScrollBarThickness = 6
-Instance.new("UICorner", holder).CornerRadius = UDim.new(0,8)
-
-local layout = Instance.new("UIListLayout", holder)
-layout.Padding = UDim.new(0, 12)
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-layout.VerticalAlignment = Enum.VerticalAlignment.Top
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-
--- Botones e inputs
-local function makeButton(text, cb)
-    local btn = Instance.new("TextButton", holder)
-    btn.Size = UDim2.new(0, 460, 0, 40)
-    btn.BackgroundColor3 = Color3.fromRGB(45,45,55)
-    btn.TextColor3 = Color3.fromRGB(255,255,255)
-    btn.Text = text; btn.Font = Enum.Font.GothamBold; btn.TextSize = 16
-    btn.AutoButtonColor = false
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
-    local stroke2 = Instance.new("UIStroke", btn)
-    stroke2.Thickness = 1; stroke2.Color = Color3.fromRGB(70,70,80)
-    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(65,65,75) end)
-    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(45,45,55) end)
-    btn.MouseButton1Click:Connect(cb)
-    return btn
+local function makeButton(text, xPos, yPos, sizeX, sizeY)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, sizeX or 60, 0, sizeY or 50)
+	btn.Position = UDim2.new(0, xPos, 0, yPos)
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.BackgroundTransparency = 0.5
+	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 14
+	btn.Text = text
+	btn.Parent = frame
+	return btn
 end
 
-local function makeInput(placeholder, default, cb)
-    local box = Instance.new("TextBox", holder)
-    box.Size = UDim2.new(0, 460, 0, 36)
-    box.PlaceholderText = placeholder; box.Text = default; box.ClearTextOnFocus = false
-    box.Font = Enum.Font.Gotham; box.TextSize = 16
-    box.BackgroundColor3 = Color3.fromRGB(45,45,55); box.TextColor3 = Color3.fromRGB(255,255,255)
-    Instance.new("UICorner", box).CornerRadius = UDim.new(0,8)
-    box.FocusLost:Connect(function() cb(tonumber(box.Text)) end)
-    return box
+local espButton = makeButton("ESP", 0, 0)
+local fovButton = makeButton("FOV", 60, 0)
+local aimbotButton = makeButton("Aim", 120, 0)
+local plusButton = makeButton("+", 0, 50, 30, 50)
+local minusButton = makeButton("-", 30, 50, 30, 50)
+local closeButton = makeButton("X", 60, 50, 120, 50)
+
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FOVCircle"
+fovCircle.Size = UDim2.new(0, fovSize * 2, 0, fovSize * 2)
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+fovCircle.BackgroundTransparency = 1
+fovCircle.Visible = false
+fovCircle.Parent = gui
+
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 2
+stroke.Color = Color3.fromRGB(255, 255, 255)
+stroke.Parent = fovCircle
+
+local circleCorner = Instance.new("UICorner")
+circleCorner.CornerRadius = UDim.new(1, 0)
+circleCorner.Parent = fovCircle
+
+local function updateTargets()
+	targets = {}
+	for _, plr in ipairs(game.Players:GetPlayers()) do
+		if plr ~= player and plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChild("HumanoidRootPart") then
+			table.insert(targets, plr.Character)
+		end
+	end
 end
 
--- Búsqueda
-local searchBox = makeInput("Buscar...", "", function() end)
-searchBox.Changed:Connect(function()
-    local filter = searchBox.Text:lower()
-    for _, child in pairs(holder:GetChildren()) do
-        if child:IsA("TextButton") or child:IsA("TextBox") then
-            local textToCheck = child.Text ~= "" and child.Text or child.PlaceholderText
-            child.Visible = textToCheck:lower():find(filter) and true or false
-        end
-    end
-end)
+local function createBillboard(target)
+	if target:FindFirstChild("Head") then
+		local billboard = Instance.new("BillboardGui")
+		billboard.Name = "ESPTag"
+		billboard.Adornee = target.Head
+		billboard.AlwaysOnTop = true
+		billboard.Size = UDim2.new(0, 200, 0, 50)
+		billboard.StudsOffset = Vector3.new(0, 2.5, 0)
 
--- Volar
-local flying, vel, gyro, flyConn = false
-makeButton("Volar (WASD)", function()
-    flying = not flying
-    local char = player.Character; if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
-    if flying then
-        vel = Instance.new("BodyVelocity", hrp); vel.MaxForce = Vector3.new(1e5,1e5,1e5); vel.Velocity = Vector3.zero
-        gyro = Instance.new("BodyGyro", hrp); gyro.MaxTorque = Vector3.new(1e7,1e7,1e7); gyro.P = 1e5
-        flyConn = rs.RenderStepped:Connect(function()
-            local cam = workspace.CurrentCamera; local dir = Vector3.zero
-            if uis:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
-            if uis:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
-            if uis:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
-            if uis:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
-            vel.Velocity = (dir.Magnitude>0 and dir.Unit*60) or Vector3.zero
-            gyro.CFrame = CFrame.new(hrp.Position, hrp.Position + cam.CFrame.LookVector)
-        end)
-    else
-        if flyConn then flyConn:Disconnect() end; if vel then vel:Destroy() end; if gyro then gyro:Destroy() end
-    end
-end)
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.Gotham
+		label.TextSize = 16
+		label.TextStrokeTransparency = 0
+		label.TextStrokeColor3 = Color3.new(0, 0, 0)
+		label.Parent = billboard
 
--- Fling
-local flingEnabled = false
-local flingConn
-makeButton("Fling (toggle)", function()
-    flingEnabled = not flingEnabled
-    if not flingEnabled then
-        if flingConn then flingConn:Disconnect() end; flingConn = nil
-        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then local bav = hrp:FindFirstChild("FlingAV") if bav then bav:Destroy() end end
-        return
-    end
-    flingConn = rs.Heartbeat:Connect(function()
-        local char = player.Character; if not char then return end
-        local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
-        if not hrp:FindFirstChild("FlingAV") then
-            local bav = Instance.new("BodyAngularVelocity")
-            bav.Name = "FlingAV"
-            bav.MaxTorque = Vector3.new(1e9,1e9,1e9)
-            bav.AngularVelocity = Vector3.new(0,8000,0)
-            bav.Parent = hrp
-        end
-    end)
-end)
+		billboard.Parent = target
+		espObjects[target] = {billboard = billboard, label = label}
 
--- Freecam
-local freecamEnabled = false
-local freecamConn, freecamPart, freecamVel, freecamGyro
-makeButton("Freecam (toggle)", function()
-    freecamEnabled = not freecamEnabled
-    local cam = workspace.CurrentCamera
-    if not freecamEnabled then
-        if freecamConn then freecamConn:Disconnect() end
-        if freecamPart then freecamPart:Destroy() end
-        cam.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or cam.CameraSubject
-        cam.CameraType = Enum.CameraType.Custom
-        return
-    end
-    -- crear parte para cámara libre
-    freecamPart = Instance.new("Part") freecamPart.Name = "FreecamPart"
-    freecamPart.Size = Vector3.new(1,1,1) freecamPart.Transparency = 1 freecamPart.CanCollide = false
-    freecamPart.CFrame = cam.CFrame freecamPart.Parent = workspace
-    cam.CameraSubject = freecamPart
-    cam.CameraType = Enum.CameraType.Scriptable
-    -- añadir control de movimiento similar a volar
-    freecamConn = rs.RenderStepped:Connect(function()
-        local dir = Vector3.zero
-        if uis:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
-        if uis:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
-        if uis:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
-        if uis:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
-        freecamPart.CFrame = freecamPart.CFrame + dir.Unit * 60 * rs.RenderStepped:Wait()
-    end)
-end)
+		local highlight = Instance.new("Highlight")
+		highlight.Name = "ESPHighlight"
+		highlight.Adornee = target
+		highlight.FillTransparency = 0.3
+		highlight.FillColor = Color3.fromRGB(255, 0, 0)
+		highlight.OutlineTransparency = 1
+		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		highlight.Parent = target
+		espObjects[target].highlight = highlight
 
--- Teleport a jugador
-local tpBox = makeInput("Jugador a teletransportar", "", function() end)
-makeButton("Teleport to Player", function()
-    local name = tpBox.Text
-    local target = game.Players:FindFirstChild(name)
-    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then hrp.CFrame = target.Character.HumanoidRootPart.CFrame * CFrame.new(0,3,0) end
-    end
-end)
+		local tracer = Drawing.new("Line")
+		tracer.Thickness = 0
+		tracer.Color = Color3.fromRGB(255, 0, 0)
+		tracer.Transparency = 1
+		tracer.Visible = true
+		espObjects[target].tracer = tracer
 
--- Tool TP
-makeButton("Tool TP (Click)", function()
-    local tool = Instance.new("Tool") tool.RequiresHandle = false tool.Name = "ClickTP"
-    tool.Activated:Connect(function()
-        local char = player.Character
-        if char then local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then hrp.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0,3,0)) end
-        end
-    end)
-    tool.Parent = player.Backpack
-end)
-
--- WalkSpeed
-makeInput("WalkSpeed (16)", "16", function(v)
-    if v and player.Character then player.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = v end
-end)
-
--- JumpPower
-makeInput("JumpPower (50)", "50", function(v)
-    if v and player.Character then player.Character:FindFirstChildOfClass("Humanoid").JumpPower = v end
-end)
-
--- Noclip
-local noclip, noclipConn = false
-makeButton("Toggle Noclip", function()
-    noclip = not noclip
-    if noclip then noclipConn = rs.Stepped:Connect(function()
-            if player.Character then for _, p in ipairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end end
-        end)
-    else
-        if noclipConn then noclipConn:Disconnect() end
-        if player.Character then for _, p in ipairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = true end end end
-    end
-end)
-
--- ESP
-local espEnabled, espConnections = false, {}
-local function clearESP()
-    for _, conn in ipairs(espConnections) do conn:Disconnect() end espConnections = {}
-    for _, plr in ipairs(game.Players:GetPlayers()) do
-        if plr.Character then local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then for _, c in ipairs(hrp:GetChildren()) do if c:IsA("BoxHandleAdornment") then c:Destroy() end end end
-            local gui = screenGui:FindFirstChild(plr.Name.."_ESPName") if gui then gui:Destroy() end
-        end
-    end
+		task.spawn(function()
+			while espEnabled and target.Parent and target:FindFirstChild("HumanoidRootPart") do
+				local dist = 0
+				local health = 0
+				if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+					dist = math.floor((player.Character.HumanoidRootPart.Position - target.HumanoidRootPart.Position).Magnitude)
+				end
+				if target:FindFirstChildOfClass("Humanoid") then
+					health = math.floor(target.Humanoid.Health)
+				end
+				label.Text = string.format("%s [%dm] [%d HP]", target.Name, dist, health)
+				task.wait(0.05)
+			end
+			if billboard then billboard:Destroy() end
+			if highlight then highlight:Destroy() end
+			if espObjects[target].tracer then espObjects[target].tracer:Remove() end
+			espObjects[target] = nil
+		end)
+	end
 end
-local function applyESP(plr)
-    local function adornCharacter(char)
-        local hrp = char:WaitForChild("HumanoidRootPart")
-        local box = Instance.new("BoxHandleAdornment") box.Name = "ESPBox" box.Adornee = hrp box.AlwaysOnTop = true box.ZIndex = 10
-        box.Size = hrp.Size + Vector3.new(0, hrp.Size.Y * 0.5, 0) box.Color3 = Color3.fromRGB(255,0,0) box.Transparency = 0.4 box.Parent = hrp
-        local gui = Instance.new("BillboardGui") gui.Name = plr.Name.."_ESPName" gui.Adornee = char:WaitForChild("Head") gui.Size = UDim2.new(0,100,0,30)
-        gui.StudsOffset = Vector3.new(0,3,0) gui.AlwaysOnTop = true gui.Parent = screenGui
-        local txt = Instance.new("TextLabel", gui) txt.Size = UDim2.new(1,0,1,0) txt.BackgroundTransparency = 1
-        txt.Text = plr.Name txt.Font = Enum.Font.GothamBold txt.TextSize = 14 txt.TextColor3 = Color3.new(1,1,1)
-    end
-    if plr.Character then adornCharacter(plr.Character) end
-    table.insert(espConnections, plr.CharacterAdded:Connect(function(c) adornCharacter(c) end))
+
+local function toggleESP()
+	espEnabled = not espEnabled
+	for target, objs in pairs(espObjects) do
+		if objs.billboard then objs.billboard:Destroy() end
+		if objs.highlight then objs.highlight:Destroy() end
+		if objs.tracer then objs.tracer:Remove() end
+	end
+	espObjects = {}
+
+	if espEnabled then
+		updateTargets()
+		for _, target in ipairs(targets) do
+			createBillboard(target)
+		end
+	end
 end
-makeButton("Toggle ESP", function()
-    espEnabled = not espEnabled
-    if espEnabled then for _, plr in ipairs(game.Players:GetPlayers()) do if plr ~= player then applyESP(plr) end end
-        table.insert(espConnections, game.Players.PlayerAdded:Connect(function(plr) applyESP(plr) end))
-    else clearESP() end
+espButton.MouseButton1Click:Connect(toggleESP)
+
+local function toggleFOV()
+	fovEnabled = not fovEnabled
+	fovCircle.Visible = fovEnabled
+end
+fovButton.MouseButton1Click:Connect(toggleFOV)
+
+local function resizeFOV(increase)
+	if not fovEnabled then return end
+	if increase then
+		fovSize = math.min(500, fovSize + 20)
+	else
+		fovSize = math.max(50, fovSize - 20)
+	end
+	fovCircle.Size = UDim2.new(0, fovSize * 2, 0, fovSize * 2)
+end
+plusButton.MouseButton1Click:Connect(function() resizeFOV(true) end)
+minusButton.MouseButton1Click:Connect(function() resizeFOV(false) end)
+
+local function toggleAimbot()
+	aimbotEnabled = not aimbotEnabled
+end
+aimbotButton.MouseButton1Click:Connect(toggleAimbot)
+
+closeButton.MouseButton1Click:Connect(function()
+	gui:Destroy()
 end)
+
+local time = 0
+runService.RenderStepped:Connect(function(dt)
+	time = time + dt
+	local rgbColor = Color3.fromHSV(time % 1, 1, 1)
+
+	if aimbotEnabled and userInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+		local bestTarget = nil
+		local bestDist = math.huge
+		local screenSize = camera.ViewportSize
+		local center = screenSize / 2
+
+		for _, target in ipairs(targets) do
+			if target.Parent and target:FindFirstChild("Head") then
+				local screenPos, onScreen = camera:WorldToViewportPoint(target.Head.Position)
+				if onScreen and screenPos.Z > 0 then
+					local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+					if dist <= fovSize and dist < bestDist then
+						bestDist = dist
+						bestTarget = target
+					end
+				end
+			end
+		end
+
+		if bestTarget then
+			local targetPos = bestTarget.Head.Position + (bestTarget.HumanoidRootPart.Velocity * 0.1)
+			local desiredCFrame = CFrame.lookAt(camera.CFrame.Position, targetPos)
+			camera.CFrame = camera.CFrame:Lerp(desiredCFrame, 0.15)
+		end
+	end
+
+	if espEnabled then
+		local playerTorsoPos = nil
+		if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local screenPos, onScreen = camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+			if onScreen then
+				playerTorsoPos = Vector2.new(screenPos.X, screenPos.Y)
+			end
+		end
+
+		for _, target in ipairs(targets) do
+			if not espObjects[target] then
+				createBillboard(target)
+			end
+
+			if espObjects[target] and espObjects[target].label then
+				espObjects[target].label.TextColor3 = rgbColor
+			end
+
+			if espObjects[target] and espObjects[target].tracer and playerTorsoPos then
+				local targetTorsoPos, onScreen = camera:WorldToViewportPoint(target.HumanoidRootPart.Position)
+				if onScreen then
+					local targetVec = Vector2.new(targetTorsoPos.X, targetTorsoPos.Y)
+					espObjects[target].tracer.From = playerTorsoPos
+					espObjects[target].tracer.To = targetVec
+					espObjects[target].tracer.Visible = true
+				else
+					espObjects[target].tracer.Visible = false
+				end
+			end
+		end
+	end
+end)
+
+game.Players.PlayerAdded:Connect(function(plr)
+	if espEnabled and plr ~= player then
+		updateTargets()
+		if plr.Character then
+			createBillboard(plr.Character)
+		end
+		plr.CharacterAdded:Connect(function(char)
+			updateTargets()
+			createBillboard(char)
+		end)
+	end
+end)
+
+game.Players.PlayerRemoving:Connect(function(plr)
+	if espEnabled then
+		updateTargets()
+		for target, objs in pairs(espObjects) do
+			if not table.find(targets, target) then
+				if objs.billboard then objs.billboard:Destroy() end
+				if objs.highlight then objs.highlight:Destroy() end
+				if objs.tracer then objs.tracer:Remove() end
+				espObjects[target] = nil
+			end
+		end
+	end
+end)
+
+print("[✅ Advanced ESP + FOV + Aimbot loaded successfully]")
